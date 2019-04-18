@@ -34,6 +34,7 @@ var canvas,
     timeLocation,
     MVPLocation = [],
     MVInvLocation,
+    drawModeLocation,
     iCount = 6,
     parameters = {  start_time  : new Date().getTime(), 
                     time        : 0, 
@@ -47,6 +48,13 @@ var model = glM.mat4.create();
 glM.mat4.identity(model);
 var view = glM.mat4.create();
 var proj = glM.mat4.create();
+
+var drawAsUsual     = true;
+var drawWireFrame   = true;
+// var drawWireFrame   = false;
+var buffer_idx_wire,
+    vertex_idx_wire,
+    iCount_wire     = 0;
 
 init();
 animate();
@@ -74,8 +82,8 @@ function init()
 
     gl.enable(gl.DEPTH_TEST);
 
-    // Create Vertex buffer (2 triangles)
-    jasmine = populatePlant(0);
+    // jasmine = populatePlant(0);
+    jasmine = populatePlant(19422);
 
     buffer_pos = gl.createBuffer();
     gl.bindBuffer( gl.ARRAY_BUFFER, buffer_pos );
@@ -105,6 +113,25 @@ function init()
     gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(jasmine.indices), gl.STATIC_DRAW );
     iCount = jasmine.iCount;
 
+    if(drawWireFrame === true)
+    {
+        var faceCnt = Math.floor(iCount / 3);
+        vertex_idx_wire = [];
+        for(var f = 0; f < faceCnt; f++)
+        {
+            var curIdx = f * 3;
+            vertex_idx_wire.push(
+                jasmine.indices[curIdx    ], jasmine.indices[curIdx + 1],
+                jasmine.indices[curIdx + 1], jasmine.indices[curIdx + 2],
+                jasmine.indices[curIdx + 2], jasmine.indices[curIdx    ]);
+        }
+
+        buffer_idx_wire = gl.createBuffer();
+        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx_wire );
+        gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(vertex_idx_wire), gl.STATIC_DRAW );
+        iCount_wire = faceCnt * 6;
+    }
+
     // Create Program
 
     currentProgram = createProgram( vertex_shader, fragment_shader );
@@ -114,6 +141,7 @@ function init()
     MVPLocation[1] = gl.getUniformLocation( currentProgram, 'view' );
     MVPLocation[2] = gl.getUniformLocation( currentProgram, 'proj' );
     MVInvLocation = gl.getUniformLocation( currentProgram, 'MV_Inv' );
+    drawModeLocation = gl.getUniformLocation( currentProgram, 'drawMode' );
     // resolutionLocation = gl.getUniformLocation( currentProgram, 'resolution' );
 
     vertex_position = gl.getAttribLocation(currentProgram, 'position');
@@ -198,9 +226,10 @@ function animate()
 
 function update()
 {
+    // var time = 8100;
     var time = new Date().getTime() - parameters.start_time;
-    var dist = 5.0;
-    glM.vec3.set(camPosition, dist * Math.sin(time / 2000.0), 5.7, dist * Math.cos(time / 2000.0));
+    var dist = 4.0;
+    glM.vec3.set(camPosition, dist * Math.sin(time / 2000.0), 4.0, dist * Math.cos(time / 2000.0));
 }
 
 function render() 
@@ -220,7 +249,7 @@ function render()
     // Update camera matrix
     
     glM.mat4.identity(view);
-    glM.mat4.lookAt(view, camPosition, [0, 0, 0], [0, 1, 0]);
+    glM.mat4.lookAt(view, camPosition, [0, 1.0, 0], [0, 1, 0]);
     glM.mat4.identity(proj);
     glM.mat4.perspective(proj, Math.PI / 4.0, 1.0, 0.2, 100.0);
 
@@ -236,21 +265,32 @@ function render()
     gl.bindBuffer( gl.ARRAY_BUFFER, buffer_pos );
     gl.vertexAttribPointer( vertex_position, 3, gl.FLOAT, false, 0, 0 );
 
-    gl.enableVertexAttribArray( vertex_normal );
-    gl.vertexAttribPointer( vertex_normal, 3, gl.FLOAT, false, 0, 0 );
+    // gl.enableVertexAttribArray( vertex_normal );
+    // gl.vertexAttribPointer( vertex_normal, 3, gl.FLOAT, false, 0, 0 );
 
     gl.enableVertexAttribArray( vertex_color );
     gl.bindBuffer( gl.ARRAY_BUFFER, buffer_col );
     gl.vertexAttribPointer( vertex_color, 4, gl.FLOAT, false, 0, 0 );
     
-    gl.enableVertexAttribArray( vertex_uv );
-    gl.vertexAttribPointer( vertex_uv, 2, gl.FLOAT, false, 0, 0 );
+    // gl.enableVertexAttribArray( vertex_uv );
+    // gl.vertexAttribPointer( vertex_uv, 2, gl.FLOAT, false, 0, 0 );
 
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx );
-    gl.drawElements( gl.TRIANGLES, iCount, gl.UNSIGNED_SHORT, 0 );
+    if(drawAsUsual == true)
+    {
+        gl.uniform1i( drawModeLocation, 0 );
+        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx );
+        gl.drawElements( gl.TRIANGLES, iCount, gl.UNSIGNED_SHORT, 0 );
+    }
+
+    if(drawWireFrame == true)
+    {
+        gl.uniform1i( drawModeLocation, 1 );
+        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx_wire );
+        gl.drawElements( gl.LINES, iCount_wire, gl.UNSIGNED_SHORT, 0 );
+    }
     
     gl.disableVertexAttribArray( vertex_position );
-    gl.disableVertexAttribArray( vertex_normal );
+    // gl.disableVertexAttribArray( vertex_normal );
     gl.disableVertexAttribArray( vertex_color );
-    gl.disableVertexAttribArray( vertex_uv );
+    // gl.disableVertexAttribArray( vertex_uv );
 }

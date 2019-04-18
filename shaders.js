@@ -9,6 +9,7 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 proj;
 uniform mat4 MV_Inv;
+uniform int  drawMode;
 
 varying vec4 vertColor;
 
@@ -16,7 +17,14 @@ void main()
 {
     // gl_Position = model * view * proj * vec4(position, 1.0);
     gl_Position = proj * view * model * vec4(position, 1.0);
-    vertColor = color;
+    if(drawMode == 0)
+    {
+        vertColor = color;
+    }
+    else
+    {
+        vertColor = vec4(0., 0., 0., 1.);
+    }
 }`;
 
 var fs_color = `
