@@ -16,26 +16,212 @@ window.requestAnimationFrame = window.requestAnimationFrame || ( function() {
 
 })();
 
+class plantRenderable
+{
+    constructor(gl, flower = false, wireframe = false)
+    {
+        this.buffer_pos = 0;
+        this.buffer_nor = 0;
+        this.buffer_col = 0;
+        this.buffer_uvw = 0;
+        this.buffer_idx = 0;
+        this.buffer_typ = 0;
+
+        this.iCount = 0;
+
+        this.gl = gl;
+
+        this.pos = glM.vec3.create();
+        this.modelMat = glM.mat4.create();
+
+        if(flower === true)
+        {
+            // Very expensive lol
+            this.buffer_pos2 = 0;
+            this.buffer_nor2 = 0;
+            this.buffer_col2 = 0;
+        }
+
+        if(wireframe === true)
+        {
+            this.buffer_idx_wire = 0;
+            this.iCount_wire = 0;
+        }
+
+        this.wireframe = wireframe;
+        this.isFlower = flower;
+    }
+
+    init(plant)
+    {
+        this.buffer_pos = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos );
+        gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.position), gl.STATIC_DRAW );
+
+        this.buffer_nor = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_nor );
+        gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.normal), gl.STATIC_DRAW );
+
+        this.buffer_col = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_col );
+        gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.color), gl.STATIC_DRAW );
+
+        this.buffer_uvw = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_uvw );
+        gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.uv), gl.STATIC_DRAW );
+
+        this.buffer_typ = gl.createBuffer();
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_typ );
+        gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.type), gl.STATIC_DRAW );
+
+        if(this.isFlower === true)
+        {
+            this.buffer_pos2 = gl.createBuffer();
+            gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos2 );
+            gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.position_sec), gl.STATIC_DRAW );
+
+            this.buffer_nor2 = gl.createBuffer();
+            gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_nor2 );
+            gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.normal_sec), gl.STATIC_DRAW );
+
+            this.buffer_col2 = gl.createBuffer();
+            gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_col2 );
+            gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(plant.color_sec), gl.STATIC_DRAW );
+        }
+        
+        this.buffer_idx = gl.createBuffer();
+        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.buffer_idx );
+        gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(plant.indices), gl.STATIC_DRAW );
+
+        this.iCount = plant.iCount;
+
+        if(this.wireframe === true)
+        {
+            // Convert triangles to lines.
+            // Unfortunately, we don't have glPolygonMethod in WebGL and OpenGL ES.
+
+            var faceCnt = Math.floor(this.iCount / 3);
+            this.vertex_idx_wire = [];
+            for(var f = 0; f < faceCnt; f++)
+            {
+                var curIdx = f * 3;
+                this.vertex_idx_wire.push(
+                    plant.indices[curIdx    ], plant.indices[curIdx + 1],
+                    plant.indices[curIdx + 1], plant.indices[curIdx + 2],
+                    plant.indices[curIdx + 2], plant.indices[curIdx    ]);
+            }
+
+            this.buffer_idx_wire = gl.createBuffer();
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.buffer_idx_wire );
+            gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(this.vertex_idx_wire), gl.STATIC_DRAW );
+            this.iCount_wire = faceCnt * 6;
+        }
+    }
+
+    render(locations)
+    {
+        gl.uniformMatrix4fv( locations.model, false, this.modelMat );
+
+        // Render geometry
+
+        gl.enableVertexAttribArray( locations.pos );
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos );
+        gl.vertexAttribPointer( locations.pos, 3, gl.FLOAT, false, 0, 0 );
+
+        gl.enableVertexAttribArray( locations.nor );
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_nor );
+        gl.vertexAttribPointer( locations.nor, 3, gl.FLOAT, false, 0, 0 );
+
+        gl.enableVertexAttribArray( locations.col );
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_col );
+        gl.vertexAttribPointer( locations.col, 4, gl.FLOAT, false, 0, 0 );
+        
+        // gl.enableVertexAttribArray( locations.uvw );
+        // gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_uvw );
+        // gl.vertexAttribPointer( locations.uvw, 2, gl.FLOAT, false, 0, 0 );
+
+        gl.enableVertexAttribArray( locations.typ );
+        gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_typ );
+        gl.vertexAttribPointer( locations.typ, 1, gl.FLOAT, false, 0, 0 );
+
+        if(this.isFlower === true)
+        {
+            gl.enableVertexAttribArray( locations.pos2 );
+            gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos2 );
+            gl.vertexAttribPointer( locations.pos2, 3, gl.FLOAT, false, 0, 0 );
+            
+            gl.enableVertexAttribArray( locations.nor2 );
+            gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_nor2 );
+            gl.vertexAttribPointer( locations.nor2, 3, gl.FLOAT, false, 0, 0 );
+            
+            gl.enableVertexAttribArray( locations.col2 );
+            gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_col2 );
+            gl.vertexAttribPointer( locations.col2, 4, gl.FLOAT, false, 0, 0 );
+        }
+
+        gl.uniform1i( locations.drawMode, 0 );
+        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.buffer_idx );
+        gl.drawElements( gl.TRIANGLES, this.iCount, gl.UNSIGNED_SHORT, 0 );
+
+        if(this.wireframe == true)
+        {
+            gl.uniform1i( locations.drawMode, 1 );
+            gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, this.buffer_idx_wire );
+            gl.drawElements( gl.LINES, this.iCount_wire, gl.UNSIGNED_SHORT, 0 );
+        }
+        
+        gl.disableVertexAttribArray( locations.pos );
+        // gl.disableVertexAttribArray( locations.nor );
+        gl.disableVertexAttribArray( locations.col );
+        // gl.disableVertexAttribArray( locations.uvw );
+
+        if(this.isFlower === true)
+        {
+            gl.disableVertexAttribArray( locations.pos2 );
+            // gl.disableVertexAttribArray( locations.nor2 );
+            gl.disableVertexAttribArray( locations.col2 );
+        }
+    }
+}
+
+class Program
+{
+    constructor(gl, vs, fs, vars)
+    {
+        this.vs = vs;
+        this.fs = fs;
+        this.vars = vars;
+        this.gl = gl;
+    }
+
+    init()
+    {
+        this.program = createProgram( this.vs, this.fs );
+        this.locations = {};
+
+        for(const v of Object.keys(this.vars))
+        {
+            // this.vars[v] = [ (String) name, (Boolean) isUniform ]
+
+            var isUniform = this.vars[v][1];
+            if(isUniform)
+            {
+                this.locations[v] = gl.getUniformLocation( this.program, this.vars[v][0] );
+            }
+            else
+            {
+                this.locations[v] = gl.getAttribLocation( this.program, this.vars[v][0] );
+            }
+        }
+    }
+}
+
 var canvas, 
     gl, 
-    buffer_pos,
-    buffer_pos2,
-    buffer_nor, 
-    buffer_col, 
-    buffer_uvw,
-    buffer_idx,
-    vertex_shader, fragment_shader, 
-    currentProgram,
-    vertex_position,
-    vertex_position2,
-    vertex_normal,
-    vertex_color,
-    vertex_uv,
-    timeLocation,
-    MVPLocation = [],
-    MVInvLocation,
-    drawModeLocation,
-    iCount = 6,
+    program_plant,
+    program_flowers,
+    plants = [],
+    flowers = [],
     parameters = {  start_time  : new Date().getTime(), 
                     time        : 0, 
                     screenWidth : 0, 
@@ -50,20 +236,14 @@ var view = glM.mat4.create();
 var proj = glM.mat4.create();
 
 var drawAsUsual     = true;
-var drawWireFrame   = true;
-// var drawWireFrame   = false;
-var buffer_idx_wire,
-    vertex_idx_wire,
-    iCount_wire     = 0;
+// var drawWireFrame   = true;
+var drawWireFrame   = false;
 
 init();
 animate();
 
 function init() 
 {
-    vertex_shader = vs_color;
-    fragment_shader = fs_color;
-
     canvas = document.querySelector( 'canvas#mainCanvas' );
 
     // Initialise WebGL
@@ -80,75 +260,61 @@ function init()
 
     }
 
+    // Create programs
+    program_plant = new Program(gl, vs_common, fs_common, {
+        time:       ['time',        true ],
+        model:      ['model',       true ],
+        view:       ['view',        true ],
+        proj:       ['proj',        true ],
+        MVInv:      ['MV_Inv',      true ],
+        drawMode:   ['drawMode',    true ],
+        
+        pos:        ['position',    false],
+        nor:        ['normal',      false],
+        col:        ['color',       false],
+        uvw:        ['uv',          false],
+        typ:        ['vType',       false],
+    });
+
+    program_plant.init();
+
+    program_flowers = new Program(gl, vs_bloom, fs_bloom, {
+        time:       ['time',        true ],
+        model:      ['model',       true ],
+        view:       ['view',        true ],
+        proj:       ['proj',        true ],
+        MVInv:      ['MV_Inv',      true ],
+        drawMode:   ['drawMode',    true ],
+        
+        pos:        ['position',    false],
+        nor:        ['normal',      false],
+        col:        ['color',       false],
+        uvw:        ['uv',          false],
+        typ:        ['vType',       false],
+
+        bloom:      ['bloom',       true ],
+        pos2:       ['position_sec',false],
+        nor2:       ['normal_sec',  false],
+        col2:       ['color_sec',   false],
+    });
+
+    program_flowers.init();
+
     gl.enable(gl.DEPTH_TEST);
 
     // jasmine = populatePlant(0);
     jasmine = populatePlant(19422);
 
-    buffer_pos = gl.createBuffer();
-    gl.bindBuffer( gl.ARRAY_BUFFER, buffer_pos );
-    // gl.bufferData( gl.ARRAY_BUFFER, new Float32Array( [ 
-    //     - 1.0, - 1.0, 0.0, 
-    //     1.0, - 1.0, 0.0, 
-    //     - 1.0, 1.0, 0.0,
-    //     1.0, - 1.0, 0.0,
-    //     1.0, 1.0, 0.0,
-    //     - 1.0, 1.0, 0.0 ] ), gl.STATIC_DRAW );
-    gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(jasmine.position), gl.STATIC_DRAW );
+    var p = new plantRenderable(gl, false, drawWireFrame);
+    p.init(jasmine);
+    plants.push(p);
 
-    buffer_col = gl.createBuffer();
-    gl.bindBuffer( gl.ARRAY_BUFFER, buffer_col );
-    // gl.bufferData( gl.ARRAY_BUFFER, new Float32Array( [ 
-    //     0.937, 0.357, 0.612, 1.0,
-    //     1.0, - 1.0, 0.0, 1.0,
-    //     - 1.0, 1.0, 0.0, 1.0,
-    //     1.0, - 1.0, 0.0, 1.0,
-    //     1.0, 1.0, 0.0, 1.0,
-    //     - 1.0, 1.0, 0.0, 1.0, ] ), gl.STATIC_DRAW );
-    gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(jasmine.color), gl.STATIC_DRAW );
+    // Blooming flowers
+    var f = new plantRenderable(gl,  true, drawWireFrame);
+    f.init(jasmine.flower);
+    flowers.push(f);
 
-    buffer_idx = gl.createBuffer();
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx );
-    // gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 3, 4, 5]), gl.STATIC_DRAW );
-    gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(jasmine.indices), gl.STATIC_DRAW );
-    iCount = jasmine.iCount;
-
-    if(drawWireFrame === true)
-    {
-        var faceCnt = Math.floor(iCount / 3);
-        vertex_idx_wire = [];
-        for(var f = 0; f < faceCnt; f++)
-        {
-            var curIdx = f * 3;
-            vertex_idx_wire.push(
-                jasmine.indices[curIdx    ], jasmine.indices[curIdx + 1],
-                jasmine.indices[curIdx + 1], jasmine.indices[curIdx + 2],
-                jasmine.indices[curIdx + 2], jasmine.indices[curIdx    ]);
-        }
-
-        buffer_idx_wire = gl.createBuffer();
-        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx_wire );
-        gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(vertex_idx_wire), gl.STATIC_DRAW );
-        iCount_wire = faceCnt * 6;
-    }
-
-    // Create Program
-
-    currentProgram = createProgram( vertex_shader, fragment_shader );
-
-    timeLocation = gl.getUniformLocation( currentProgram, 'time' );
-    MVPLocation[0] = gl.getUniformLocation( currentProgram, 'model' );
-    MVPLocation[1] = gl.getUniformLocation( currentProgram, 'view' );
-    MVPLocation[2] = gl.getUniformLocation( currentProgram, 'proj' );
-    MVInvLocation = gl.getUniformLocation( currentProgram, 'MV_Inv' );
-    drawModeLocation = gl.getUniformLocation( currentProgram, 'drawMode' );
-    // resolutionLocation = gl.getUniformLocation( currentProgram, 'resolution' );
-
-    vertex_position = gl.getAttribLocation(currentProgram, 'position');
-    vertex_position2 = gl.getAttribLocation(currentProgram, 'position_secondary');
-    vertex_normal = gl.getAttribLocation(currentProgram, 'normal');
-    vertex_color = gl.getAttribLocation(currentProgram, 'color');
-    vertex_uv = gl.getAttribLocation(currentProgram, 'uv');
+    // TODO: flowers
 }
 
 function createProgram( vertex, fragment ) 
@@ -228,13 +394,16 @@ function update()
 {
     // var time = 8100;
     var time = new Date().getTime() - parameters.start_time;
-    var dist = 4.0;
-    glM.vec3.set(camPosition, dist * Math.sin(time / 2000.0), 4.0, dist * Math.cos(time / 2000.0));
+    var dist = 5.7;
+    glM.vec3.set(camPosition, dist * Math.sin(time / 2000.0), 3.4, dist * Math.cos(time / 2000.0));
 }
 
 function render() 
 {
-    if ( !currentProgram ) return;
+    if ( !program_plant.program ) return;
+    if ( !program_flowers.program ) return;
+
+    var camTarget = [0, 1.14, 0];
 
     parameters.time = new Date().getTime() - parameters.start_time;
 
@@ -243,54 +412,49 @@ function render()
 
     // Load program into GPU
 
-    gl.useProgram( currentProgram );
+    // Draw plants (parts are not flowers)
+
+    gl.useProgram( program_plant.program );
 
     // Set values to program variables
     // Update camera matrix
     
     glM.mat4.identity(view);
-    glM.mat4.lookAt(view, camPosition, [0, 1.0, 0], [0, 1, 0]);
+    glM.mat4.lookAt(view, camPosition, camTarget, [0, 1, 0]);
     glM.mat4.identity(proj);
     glM.mat4.perspective(proj, Math.PI / 4.0, 1.0, 0.2, 100.0);
 
-    gl.uniform1f( timeLocation, parameters.time / 1000 );
-    gl.uniformMatrix4fv( MVPLocation[0], false, model );
-    gl.uniformMatrix4fv( MVPLocation[1], false, view );
-    gl.uniformMatrix4fv( MVPLocation[2], false, proj );
+    gl.uniform1f( program_plant.locations.time, parameters.time / 1000 );
+    gl.uniformMatrix4fv( program_plant.locations.view, false, view );
+    gl.uniformMatrix4fv( program_plant.locations.proj, false, proj );
     // gl.uniformMatrix4fv( MVInvLocation, false, MV_Inv );
 
     // Render geometry
-
-    gl.enableVertexAttribArray( vertex_position );
-    gl.bindBuffer( gl.ARRAY_BUFFER, buffer_pos );
-    gl.vertexAttribPointer( vertex_position, 3, gl.FLOAT, false, 0, 0 );
-
-    // gl.enableVertexAttribArray( vertex_normal );
-    // gl.vertexAttribPointer( vertex_normal, 3, gl.FLOAT, false, 0, 0 );
-
-    gl.enableVertexAttribArray( vertex_color );
-    gl.bindBuffer( gl.ARRAY_BUFFER, buffer_col );
-    gl.vertexAttribPointer( vertex_color, 4, gl.FLOAT, false, 0, 0 );
-    
-    // gl.enableVertexAttribArray( vertex_uv );
-    // gl.vertexAttribPointer( vertex_uv, 2, gl.FLOAT, false, 0, 0 );
-
-    if(drawAsUsual == true)
+    for(var plant of plants)
     {
-        gl.uniform1i( drawModeLocation, 0 );
-        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx );
-        gl.drawElements( gl.TRIANGLES, iCount, gl.UNSIGNED_SHORT, 0 );
+        plant.render(program_plant.locations);
     }
 
-    if(drawWireFrame == true)
-    {
-        gl.uniform1i( drawModeLocation, 1 );
-        gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, buffer_idx_wire );
-        gl.drawElements( gl.LINES, iCount_wire, gl.UNSIGNED_SHORT, 0 );
-    }
+    // Draw flowers
+
+    gl.useProgram( program_flowers.program );
+
+    // Set values to program variables
+    // Update camera matrix
     
-    gl.disableVertexAttribArray( vertex_position );
-    // gl.disableVertexAttribArray( vertex_normal );
-    gl.disableVertexAttribArray( vertex_color );
-    // gl.disableVertexAttribArray( vertex_uv );
+    glM.mat4.identity(view);
+    glM.mat4.lookAt(view, camPosition, camTarget, [0, 1, 0]);
+    glM.mat4.identity(proj);
+    glM.mat4.perspective(proj, Math.PI / 4.0, 1.0, 0.2, 100.0);
+
+    gl.uniform1f( program_flowers.locations.time, parameters.time / 1000 );
+    gl.uniformMatrix4fv( program_flowers.locations.view, false, view );
+    gl.uniformMatrix4fv( program_flowers.locations.proj, false, proj );
+    // gl.uniformMatrix4fv( MVInvLocation, false, MV_Inv );
+
+    // Render geometry
+    for(var flower of flowers)
+    {
+        flower.render(program_flowers.locations);
+    }
 }

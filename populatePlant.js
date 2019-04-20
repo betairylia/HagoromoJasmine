@@ -58,6 +58,7 @@ var Jasmine =
         rSeg = 50,
         color = [1, 1, 1, 1],
         up = [0, 1, 0],
+        type = 0.0, // Default type is "Stem"
     } = {})
     {
         if(!translation) { translation = glM.mat4.create(); }
@@ -124,16 +125,24 @@ var Jasmine =
                 var ptX = Math.sin(rad) * cur_radius;
                 var ptZ = Math.cos(rad) * cur_radius;
 
+                var dP = glM.vec3.create();
+                glM.vec3.add(dP, dP, glM.vec3.scale(glM.vec3.create(), tX, ptX));
+                glM.vec3.add(dP, dP, glM.vec3.scale(glM.vec3.create(), tZ, ptZ));
+
                 var finalPos = glM.vec3.create();
                 glM.vec3.set(finalPos,
-                    curve[i][0] + ptX * tX[0] + ptZ * tZ[0],
-                    curve[i][1] + ptX * tX[1] + ptZ * tZ[1],
-                    curve[i][2] + ptX * tX[2] + ptZ * tZ[2])
+                    curve[i][0] + dP[0],
+                    curve[i][1] + dP[1],
+                    curve[i][2] + dP[2])
 
                 glM.vec3.transformMat4(finalPos, finalPos, translation);
                 
                 plant['position'].push(finalPos[0], finalPos[1], finalPos[2]);
+                var rot = glM.mat4.getRotation(glM.quat.create(), translation);
+                var _dP = glM.vec3.transformQuat(glM.vec3.create(), dP, rot);
+                plant['normal'].push(_dP[0], _dP[1], _dP[2]);
                 plant['color'].push(color[0], color[1], color[2], color[3]);
+                plant['type'].push(type);
                 // TODO: normal, uv, etc.
             }
         }
@@ -276,15 +285,31 @@ var Jasmine =
 
     flattenBell: function({
         x,
-        flatten = 2,
+        flatten = 0,
         mu = 0.5,
         dev = 0.16, // 2 * (sigma ^ 2)
     } = {})
     {
-        var value = Math.tanh(flatten * Math.exp(-(Math.pow(x - mu, 2)) / dev));
-        var maxValue = Math.tanh(flatten * Math.exp(-(Math.pow(0, 2)) / dev));
-        value *= 1.0 / maxValue;
+        // var value = Math.tanh(flatten * Math.exp(-(Math.pow(x - mu, 2)) / dev));
+        // var maxValue = Math.tanh(flatten * Math.exp(-(Math.pow(0, 2)) / dev));
+        // value *= 1.0 / maxValue;
+
+        var value = Math.exp(-(Math.pow(Math.abs(x - mu), 2 + flatten)) / dev);
+
         return value;
+    },
+
+    dFlattenBell: function({
+        x,
+        flatten = 0,
+        mu = 0.5,
+        dev = 0.16, // 2 * (sigma ^ 2)
+    } = {})
+    {
+        var sign = 1;
+        if(x - mu < 0) { sign = -1; }
+
+        return -(1 / dev) * Math.exp(-(Math.pow(Math.abs(x - mu), 2 + flatten)) / dev) * (2 + flatten) * Math.pow(Math.abs(x - mu), 1 + flatten);
     },
 
     leaf: function({
@@ -292,6 +317,8 @@ var Jasmine =
         translation = undefined, 
         length = 1.8, // ratio of length to width (1.0), don't change the scale 
         startW = 0.0, // value within [0.0, 1.0]
+        normalAlign = [0, 1, 0],
+        normalAlignPower = 0.4,
         horizons = 3, verticals = 2} = {})
     {
         // console.log(translation);
@@ -312,7 +339,7 @@ var Jasmine =
             var pY = 0.0;
 
             // calculate width
-            var width = startW + (1.0 - startW) * this.flattenBell({x: pX, flatten: 1.4, dev: 0.16});
+            var width = startW + (1.0 - startW) * this.flattenBell({x: pX, flatten: 0.5, dev: 0.16});
             width *= 1.0 / length;
             var zSegment = width / (verticals - 1);
 
@@ -325,7 +352,15 @@ var Jasmine =
                 glM.vec3.add(finalPos, finalPos, fbm3D(0.5, finalPos[0] - 196, finalPos[1], finalPos[2], Math.pow(pX, 0.2) * 0.02, 6.0)); // Add some noise, but no noise at root (pX = 0)
 
                 plant['position'].push(finalPos[0], finalPos[1], finalPos[2]);
+
+                var rot = glM.mat4.getRotation(glM.quat.create(), translation);
+                var _n = glM.vec3.transformQuat(glM.vec3.create(), [0, 1, 0], rot);
+                glM.vec3.normalize(_n, _n);
+                glM.vec3.lerp(_n, _n, normalAlign, normalAlignPower);
+                plant['normal'].push(_n[0], _n[1], _n[2]);
+                
                 plant['color'].push(0.282, 0.486, 0.220, 1.0);
+                plant['type'].push(1.0); // Leaf
                 // plant['color'].push(0.937, 0.357 + (1.0 - 0.357) * Math.abs(len / (width / 2.0)), 0.612, 1.0);
             }
         }
@@ -452,6 +487,9 @@ var Jasmine =
         startW = 0.3, expand = 0.0, totalGain = 0.4, fallOffGain = 0.1, expandExp = 2.0, fallOffExp = 3.5, cutOff = 4.7,
         rStart = 0.1, rEnd = 1.0, rGain = 1.4,
         length = 1.8, // ratio of length to width (1.0), don't change the scale 
+        budLen = 5.5,
+        normalAlign = [0, 1, 0],
+        normalAlignPower = 0.4,
         horizons = 12, verticals = 8} = {})
     {
         // console.log(translation);
@@ -467,59 +505,110 @@ var Jasmine =
         var segment = 1.0 / (horizons - 1);
         for(var h = 0; h < horizons; h++)
         {
-            // Sample the point
-            var pX = segment * h;
-            var pY = Math.pow(pX + 1e-3, alpha) * 0.4;
-
-            // calculate width
-            var width = 
-                startW + expand * (cutOff * pX) +
-                (1 - startW) * Math.tanh(
-                    (totalGain * (
-                        Math.pow(cutOff * pX, expandExp) - 
-                        Math.pow(cutOff * pX, fallOffExp) * fallOffGain
-                    ))
-                );
-            width = Math.max(width, 0.0) / length;
-            var zSegment = width / (verticals - 1);
-
-            var radius = rStart + (rEnd - rStart) * Math.pow(pX, 1.0 / rGain);
-            // console.log(h);
-            // console.log(radius);
-
-            radius /= length;
-
-            // Dive into the tangent space
-            var dY = alpha * Math.pow(pX + 1e-1, alpha - 1); // derivative
-            var tX = glM.vec3.create();
-            var tY = glM.vec3.create();
-            var tZ = glM.vec3.create();
-
-            glM.vec3.set(tX, 1.0, dY, 0.0);
-            glM.vec3.normalize(tX, tX);
-            glM.vec3.cross(tZ, tX, [0, 1, 0]);
-            glM.vec3.normalize(tZ, tZ);
-            glM.vec3.cross(tY, tZ, tX);
-
-            // DEBUG
-            for(var v = 0; v < verticals; v++)
+            // Position 1 - Bud
             {
-                var len = (-(width / 2.0)) + v * zSegment;
-                var rad = len / radius; // * Math.PI;
-                var vtY = -Math.cos(rad) * radius + radius;
-                var vtZ =  Math.sin(rad) * radius;
+                // Sample the point
+                var pY = segment * h;
+                var pR = this.flattenBell({x: pY, flatten: 0.2, mu: 0.3, dev: 0.15}) / budLen;
 
-                var finalPos = glM.vec3.create();
-                glM.vec3.set(finalPos,
-                    pX + vtY * tY[0] + vtZ * tZ[0] + 0.03, 
-                    pY + vtY * tY[1] + vtZ * tZ[1], 
-                     0 + vtY * tY[2] + vtZ * tZ[2]
-                );
-                glM.vec3.transformMat4(finalPos, finalPos, translation);
+                // calculate width
+                var width = Math.PI * 0.6; // in radian
+                width = Math.max(width, 0.0);
+                var zSegment = width / (verticals - 1);
 
-                plant['position'].push(finalPos[0], finalPos[1], finalPos[2]);
-                plant['color'].push(0.996, 0.933, 0.929, 1.0);
-                // plant['color'].push(0.937, 0.357 + (1.0 - 0.357) * Math.abs(len / (width / 2.0)), 0.612, 1.0);
+                // var radius = rStart + (rEnd - rStart) * Math.pow(pX, 1.0 / rGain);
+                // console.log(h);
+                // console.log(radius);
+
+                // radius /= length;
+
+                // Dive into the tangent space
+                var dR = this.dFlattenBell({x: pY, flatten: 0.2, mu: 0.3, dev: 0.15}) / budLen; // derivative
+                var yScale = 1.1;
+
+                for(var v = 0; v < verticals; v++)
+                {
+                    var theta = (width / 2) - v * zSegment;
+
+                    var tangentSpace = this.alignYAxis({ vec: [Math.cos(theta) * dR, yScale, -Math.sin(theta) * dR], up: [0, 1, 0] });
+
+                    var finalPos = glM.vec3.create();
+                    glM.vec3.set(finalPos, Math.cos(theta) * pR, pY * yScale, -Math.sin(theta) * pR);
+                    glM.vec3.transformMat4(finalPos, finalPos, translation);
+
+                    plant['position'].push(finalPos[0], finalPos[1], finalPos[2]);
+
+                    var rot = glM.mat4.getRotation(glM.quat.create(), translation);
+                    var norm = glM.vec3.transformQuat(glM.vec3.create(), glM.vec3.transformMat4(glM.vec3.create(), [0, 0, -1], tangentSpace), rot);
+                    glM.vec3.normalize(norm, norm);
+                    glM.vec3.lerp(norm, norm, normalAlign, normalAlignPower);
+                    plant['normal'].push(norm[0], norm[1], norm[2]);
+
+                    // plant['color'].push(0.843, 0.075, 0.271, 1.0);
+                    plant['color'].push(0.996, 0.933, 0.929, 1.0);
+                    plant['type'].push(3.0); // Petal
+                }
+            }
+
+            // Position 2 - Blooming flower
+            {
+                // Sample the point
+                var pX = segment * h;
+                var pY = Math.pow(pX + 1e-3, alpha) * 0.4;
+
+                // calculate width
+                var width = 
+                    startW + expand * (cutOff * pX) +
+                    (1 - startW) * Math.tanh(
+                        (totalGain * (
+                            Math.pow(cutOff * pX, expandExp) - 
+                            Math.pow(cutOff * pX, fallOffExp) * fallOffGain
+                        ))
+                    );
+                width = Math.max(width, 0.0) / length;
+                var zSegment = width / (verticals - 1);
+
+                var radius = rStart + (rEnd - rStart) * Math.pow(pX, 1.0 / rGain);
+                // console.log(h);
+                // console.log(radius);
+
+                radius /= length;
+
+                // Dive into the tangent space
+                var dY = alpha * Math.pow(pX + 1e-1, alpha - 1); // derivative
+                var tX = glM.vec3.create();
+                var tY = glM.vec3.create();
+                var tZ = glM.vec3.create();
+
+                glM.vec3.set(tX, 1.0, dY, 0.0);
+                glM.vec3.normalize(tX, tX);
+                glM.vec3.cross(tZ, tX, [0, 1, 0]);
+                glM.vec3.normalize(tZ, tZ);
+                glM.vec3.cross(tY, tZ, tX);
+
+                for(var v = 0; v < verticals; v++)
+                {
+                    var len = (-(width / 2.0)) + v * zSegment;
+                    var rad = len / radius; // * Math.PI;
+                    var vtY = -Math.cos(rad) * radius + radius;
+                    var vtZ =  Math.sin(rad) * radius;
+
+                    var finalPos = glM.vec3.create();
+                    glM.vec3.set(finalPos,
+                        pX + vtY * tY[0] + vtZ * tZ[0] + 0.03, 
+                        pY + vtY * tY[1] + vtZ * tZ[1], 
+                        0 + vtY * tY[2] + vtZ * tZ[2]
+                    );
+                    glM.vec3.transformMat4(finalPos, finalPos, translation);
+
+                    plant['position_sec'].push(finalPos[0], finalPos[1], finalPos[2]);
+                    
+                    var norm = glM.vec3.normalize(glM.vec3.clone(tY), tY);
+                    glM.vec3.lerp(norm, norm, normalAlign, normalAlignPower);
+                    plant['normal_sec'].push(norm[0], norm[1], norm[2]);
+                    
+                    plant['color_sec'].push(0.996, 0.933, 0.929, 0.8 / dY);
+                }
             }
         }
 
@@ -597,10 +686,10 @@ var Jasmine =
                 stack.push(glM.mat4.clone(tmp));
                     glM.mat4.rotateY(tmp, tmp, i * (2.0 * Math.PI / petals))
                     this.petal({
-                        plant: plant,
+                        plant: plant.flower,
                         translation: tmp,
                         horizons: 6,
-                        verticals: 3,
+                        verticals: 4,
                     });
                 tmp = stack.pop();
             }
@@ -627,7 +716,7 @@ var Jasmine =
                     pistilRadius.push(0.04 * this.flattenBell({x: x, flatten: 2})); // a "flatten" bell curve.
                 }
 
-                this.drawCurve({plant: plant, translation: tmp, curve: pistil, radius: pistilRadius, rSeg: rSeg, color: [0.988, 0.945, 0.431, 1.00]});
+                this.drawCurve({plant: plant, translation: tmp, curve: pistil, radius: pistilRadius, rSeg: rSeg, color: [0.988, 0.945, 0.431, 1.00], type: 2.0 /*Pistil*/});
             }
             tmp = stack.pop();
 
@@ -929,29 +1018,46 @@ function populatePlant(seed = 0)
     var plant = 
     {
         position:       [],
-        position_sec:   [],
         normal:         [],
         color:          [],
         uv:             [],
         indices:        [],
+        type:           [],
         seed:           seed,
         iCount:         0,
     };
+
+    var flower = 
+    {
+        position:       [],
+        position_sec:   [],
+        normal:         [],
+        normal_sec:     [],
+        color:          [],
+        color_sec:      [],
+        uv:             [],
+        indices:        [],
+        type:           [],
+        seed:           seed,
+        iCount:         0,
+    };
+
+    plant.flower = flower;
 
     initNoise(seed);
     initNoise(12);
 
     var translate = glM.mat4.create();
     // Jasmine.leaf({plant: plant, translation: glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2]), horizons: 16, verticals: 12});
-    Jasmine.leafStem({plant: plant, translation: glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2])});
+    // Jasmine.leafStem({plant: plant, translation: glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2])});
 
     var t = glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2]);
     glM.mat4.translate(t, t, [0, 0, 1]);
-    Jasmine.petal({plant: plant, translation: t});
-    Jasmine.flowerStem({
+    // Jasmine.petal({plant: plant, translation: t});
+    Jasmine.flowerStem({ 
         plant: plant, translation: translate, 
         nSeg: 2, step: 0.07, noiseP: 0.1,
-        start: [0, 0, 0.4],
+        start: [0, 0, 0.0],
         startDirc: [nextFloat(), nextFloat(), nextFloat()], 
         alignDirc: [nextFloat(), nextFloat(), nextFloat()], align: 0.4,
     noiseA: 2.0,});
@@ -964,6 +1070,7 @@ function populatePlant(seed = 0)
     // });
 
     plant.iCount = plant.indices.length;
+    plant.flower.iCount = plant.flower.indices.length;
 
     console.log(plant);
 
