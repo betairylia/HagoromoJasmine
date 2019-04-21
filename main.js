@@ -681,7 +681,7 @@ function render()
         gl.activeTexture(gl.TEXTURE0 + 1);
         gl.bindTexture(gl.TEXTURE_2D, post_sky.depthTex);
         gl.uniform1i(post_DOF_X.program.locations.depth, 1);
-        gl.uniform4f(post_DOF_X.program.locations.dof, 0.2, 100.0, 1.5, 1.0);
+        gl.uniform4f(post_DOF_X.program.locations.dof, 0.2, 100.0, 1.5, 0.4);
         gl.uniform2f(post_DOF_X.program.locations.dirc, 1.0, 0.0);
     });
 
@@ -692,7 +692,7 @@ function render()
         gl.activeTexture(gl.TEXTURE0 + 1);
         gl.bindTexture(gl.TEXTURE_2D, post_sky.depthTex);
         gl.uniform1i(post_DOF_X.program.locations.depth, 1);
-        gl.uniform4f(post_DOF_X.program.locations.dof, 0.2, 100.0, 1.5, 1.0);
+        gl.uniform4f(post_DOF_X.program.locations.dof, 0.2, 100.0, 1.5, 0.4);
         gl.uniform2f(post_DOF_X.program.locations.dirc, 0.0, 1.0);
     });
 

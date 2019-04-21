@@ -338,6 +338,13 @@ uniform vec3 camPos;
 uniform vec3 light;
 uniform vec4 lightColor;
 
+// From https://stackoverflow.com/a/6657284/10011415
+float linearize_depth(float d,float zNear,float zFar)
+{
+    float z_n = 2.0 * d - 1.0;
+    return 2.0 * zNear * zFar / (zFar + zNear - z_n * (zFar - zNear));
+}
+
 void main( void ) 
 {
     // gl_FragColor = texture2D(color, screenUV);
@@ -355,6 +362,11 @@ void main( void )
     // Blueish day-time
     vec3 skyTop = vec3(0.565, 0.843, 0.925);
     vec3 skyBot = vec3(0.275, 0.365, 0.667);
+
+    // Golden
+    // vec3 skyTop = vec3(0.980, 0.655, 0.333);
+    // vec3 skyBot = vec3(0.965, 0.612, 0.524);
+
     float sky = 0.;
 
     if(d == 1.0) // Nothing rendered - render sky instead
@@ -374,7 +386,10 @@ void main( void )
     else
     {
         // gl_FragColor = vec4(d, d, d, 1.);
-        gl_FragColor = texture2D(color, screenUV);
+        sky = clamp((screenUV.y), 0., 1.);
+        colorTone = mix(skyBot, skyTop, sky);
+        // colorTone = lightColor.rgb;
+        gl_FragColor = mix(texture2D(color, screenUV), vec4(colorTone, 1.0), pow(linearize_depth(d, 0.016, 0.8), 1.4));
     }
 }`
 
@@ -398,9 +413,9 @@ uniform vec2 dirc;
 
 varying vec2 screenUV;
 
-#define BLUR_STEPS 7
+#define BLUR_STEPS 9
 #define WIDTH 600.0
-#define SIZE 2.5
+#define SIZE 4.0
 
 // From https://stackoverflow.com/a/6657284/10011415
 float linearize_depth(float d,float zNear,float zFar)
@@ -412,7 +427,7 @@ float linearize_depth(float d,float zNear,float zFar)
 float getDOF(float d)
 {
     float dep = linearize_depth(d, DOF.x, DOF.y);
-    float r = clamp((abs(dep - DOF.z) - DOF.w) / DOF.w, 0., 1.);
+    float r = clamp((abs(dep - DOF.z) - DOF.w) / DOF.w * 0.1, 0., 1.);
     r *= 3.;
     return r;
 }
@@ -421,10 +436,19 @@ float getDOF(float d)
 float gaussian(int i)
 {
     float g = 0.;
-    if(i == 3) { g = 0.383103; }
-    if(i == 2 || i == 4) { g = 0.241843; }
-    if(i == 1 || i == 5) { g = 0.060626; }
-    if(i == 0 || i == 6) { g = 0.005980; }
+
+    // KERNEL SIZE 7
+    // if(i == 3) { g = 0.383103; }
+    // if(i == 2 || i == 4) { g = 0.241843; }
+    // if(i == 1 || i == 5) { g = 0.060626; }
+    // if(i == 0 || i == 6) { g = 0.005980; }
+
+    // KERNEL SIZE 9
+    if(i == 4)              { g = 0.382928; }
+    if(i == 3 || i == 5)    { g = 0.241732; }
+    if(i == 2 || i == 6)    { g = 0.060598; }
+    if(i == 1 || i == 7)    { g = 0.005977; }
+    if(i == 0 || i == 8)    { g = 0.000229; }
     
     return g;
 }
