@@ -37,7 +37,7 @@ function nextFloat()
 function fbm3D(gain, x, y, z, scale = 1.0, freq = 1.0)
 {
     return [
-        scale * noise.fbm(gain, freq * x + 0.0, freq * y + 0.0, freq * z + 0.0),
+        scale * noise.fbm(gain, freq * x - 3.2, freq * y + 6.8, freq * z + 0.0),
         scale * noise.fbm(gain, freq * x + 1.7, freq * y + 1.2, freq * z - 0.8),
         scale * noise.fbm(gain, freq * x - 9.2, freq * y + 4.7, freq * z - 3.3),
     ];
@@ -359,7 +359,7 @@ var Jasmine =
                 glM.vec3.lerp(_n, _n, normalAlign, normalAlignPower);
                 plant['normal'].push(_n[0], _n[1], _n[2]);
                 
-                plant['color'].push(0.282, 0.486, 0.220, 1.0);
+                plant['color'].push(0.282, 0.486, 0.220, 0.65 + Math.pow(pX, 0.2) * 0.35); // Fake AO
                 plant['type'].push(1.0); // Leaf
                 // plant['color'].push(0.937, 0.357 + (1.0 - 0.357) * Math.abs(len / (width / 2.0)), 0.612, 1.0);
             }
@@ -461,8 +461,8 @@ var Jasmine =
             this.leaf({
                 plant: plant,
                 translation: translation,
-                horizons: 6,
-                verticals: 4,
+                horizons: 4,
+                verticals: 3,
             });
 
             translation = stack.pop();
@@ -474,7 +474,7 @@ var Jasmine =
             curve: stem,
             radius: radius,
             rSeg: rSeg,
-            color: [0.671, 0.784, 0.545, 1.0],
+            color: [0.694, 0.545, 0.333, 1.0],
         });
     },
 
@@ -490,6 +490,7 @@ var Jasmine =
         budLen = 5.5,
         normalAlign = [0, 1, 0],
         normalAlignPower = 0.4,
+        bloomTime = 0.5,
         horizons = 12, verticals = 8} = {})
     {
         // console.log(translation);
@@ -544,8 +545,8 @@ var Jasmine =
                     glM.vec3.lerp(norm, norm, normalAlign, normalAlignPower);
                     plant['normal'].push(norm[0], norm[1], norm[2]);
 
-                    // plant['color'].push(0.843, 0.075, 0.271, 1.0);
-                    plant['color'].push(0.996, 0.933, 0.929, 1.0);
+                    plant['color'].push(0.847, 0.220, 0.380, bloomTime);
+                    // plant['color'].push(0.996, 0.933, 0.929, bloomTimeS);
                     plant['type'].push(3.0); // Petal
                 }
             }
@@ -607,7 +608,7 @@ var Jasmine =
                     glM.vec3.lerp(norm, norm, normalAlign, normalAlignPower);
                     plant['normal_sec'].push(norm[0], norm[1], norm[2]);
                     
-                    plant['color_sec'].push(0.996, 0.933, 0.929, 0.8 / dY);
+                    plant['color_sec'].push(0.996, 0.933, 0.929, dY);
                 }
             }
         }
@@ -665,9 +666,9 @@ var Jasmine =
             rodRadius.push(0.02 + 0.04 * Math.pow(x, 1.5));
         }
 
-        this.drawCurve({plant: plant, translation: translation, curve: stemPetals, radius: rodRadius, rSeg: 8,});
+        this.drawCurve({plant: plant, translation: translation, curve: stemPetals, radius: rodRadius, rSeg: 8, color: [0.847, 0.220, 0.380, 1.0], type: 2.0,});
 
-        var flowerPos = this.evalCurve({curve: stemPetals, evals: [0.91], withDirc: true})[0];
+        var flowerPos = this.evalCurve({curve: stemPetals, evals: [0.95], withDirc: true})[0];
         var rot = glM.mat4.create();
         if(!(worldSpaceDirc == false && dirc[0] == 0 && dirc[1] == 1 && dirc[2] == 0))
         {
@@ -676,6 +677,10 @@ var Jasmine =
 
         stack.push(glM.mat4.clone(tmp));
         var flowerScale = 0.5;
+        var _p = glM.vec3.transformMat4(glM.vec3.create(), flowerPos[0], translation);
+        glM.vec3.scale(_p, _p, 0.5); // freq = 12
+        var bloomTime = 0.5 - 0.5 * noise.fbm(0.5, _p[0], _p[1], _p[2]);
+        // console.log(bloomTime);
         glM.mat4.translate(tmp, tmp, flowerPos[0]);
         glM.mat4.scale(tmp, tmp, [flowerScale, flowerScale, flowerScale]);
         glM.mat4.mul(tmp, tmp, rot);
@@ -690,6 +695,7 @@ var Jasmine =
                         translation: tmp,
                         horizons: 6,
                         verticals: 4,
+                        bloomTime: bloomTime,
                     });
                 tmp = stack.pop();
             }
@@ -769,7 +775,7 @@ var Jasmine =
             curve: stem,
             radius: radius,
             rSeg: rSeg,
-            color: [0.671, 0.784, 0.545, 1.0],
+            color: [0.694, 0.545, 0.333, 1.0],
         });
     },
 
@@ -802,7 +808,7 @@ var Jasmine =
         for(var i = 0; i < nSub; i++)
         {
             var x = subStart + i * ((subEnd - subStart) / (nSub - 1));
-            subs.push(Math.min(subEnd, Math.max(subStart, x + nextFloatRange(-0.3, 0.3))));
+            subs.push(Math.min(subEnd, Math.max(subStart, x + nextFloatRange(-0.01, 0.01))));
         }
 
         subs = this.evalCurve({curve: stem, evals: subs, withDirc: true});
@@ -854,7 +860,8 @@ var Jasmine =
                     noiseOctwave: 0.6,
                     step: step * 3,
                     nSeg: 8,
-                    radius: 0.02,
+                    radius: 0.01,
+                    rSeg: 5,
                     nSub: 40, subStart: 0.05, subEnd: 0.9
                 });
             }
@@ -872,7 +879,8 @@ var Jasmine =
                         noiseA: 0.0,
                         step: 0.08 * nextFloatRange(0.7, 1.1),
                         nSeg: 3,
-                        radius: 0.01,
+                        rSeg: 5,
+                        radius: 0.007,
                     });
                 }
                 else
@@ -889,8 +897,9 @@ var Jasmine =
                         noiseP: 0.001,
                         step: 0.1 * nextFloatRange(0.7, 1.1),
                         nSeg: 9,
+                        rSeg: 5,
                         nSub: 4,
-                        // radius: 0.01,
+                        radius: 0.005,
                     });
                 }
             }
@@ -904,7 +913,7 @@ var Jasmine =
             curve: stem,
             radius: radius,
             rSeg: rSeg,
-            color: [0.671, 0.784, 0.545, 1.0],
+            color: [0.694, 0.545, 0.333, 1.0],
         });
     },
 
@@ -994,7 +1003,7 @@ var Jasmine =
             curve: stem,
             radius: radius,
             rSeg: rSeg,
-            color: [0.0, 0.482, 0.286, 1.0],
+            color: [0.694, 0.545, 0.333, 1.0],
         });
     },
 
@@ -1013,7 +1022,7 @@ var Jasmine =
     }
 };
 
-function populatePlant(seed = 0)
+function populatePlant(seed = 0, translation = glM.mat4.create())
 {
     var plant = 
     {
@@ -1045,22 +1054,22 @@ function populatePlant(seed = 0)
     plant.flower = flower;
 
     initNoise(seed);
-    initNoise(12);
+    // initNoise(12);
 
-    var translate = glM.mat4.create();
+    var translate = glM.mat4.clone(translation);
     // Jasmine.leaf({plant: plant, translation: glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2]), horizons: 16, verticals: 12});
     // Jasmine.leafStem({plant: plant, translation: glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2])});
 
-    var t = glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2]);
-    glM.mat4.translate(t, t, [0, 0, 1]);
+    // var t = glM.mat4.fromScaling(glM.mat4.create(), [0.2, 0.2, 0.2]);
+    // glM.mat4.translate(t, t, [0, 0, 1]);
     // Jasmine.petal({plant: plant, translation: t});
-    Jasmine.flowerStem({ 
-        plant: plant, translation: translate, 
-        nSeg: 2, step: 0.07, noiseP: 0.1,
-        start: [0, 0, 0.0],
-        startDirc: [nextFloat(), nextFloat(), nextFloat()], 
-        alignDirc: [nextFloat(), nextFloat(), nextFloat()], align: 0.4,
-    noiseA: 2.0,});
+    // Jasmine.flowerStem({ 
+    //     plant: plant, translation: translate, 
+    //     nSeg: 2, step: 0.07, noiseP: 0.1,
+    //     start: [0, 0, 0.0],
+    //     startDirc: [nextFloat(), nextFloat(), nextFloat()], 
+    //     alignDirc: [nextFloat(), nextFloat(), nextFloat()], align: 0.4,
+    // noiseA: 2.0,});
     Jasmine.jasmine({plant: plant, translation: translate});
 
     // Jasmine.drawCurve({

@@ -18,7 +18,7 @@ window.requestAnimationFrame = window.requestAnimationFrame || ( function() {
 
 class plantRenderable
 {
-    constructor(gl, flower = false, wireframe = false)
+    constructor(gl, flower = false, wireframe = false, normal = false)
     {
         this.buffer_pos = 0;
         this.buffer_nor = 0;
@@ -48,8 +48,18 @@ class plantRenderable
             this.iCount_wire = 0;
         }
 
+        if(normal === true)
+        {
+            this.buffer_pos_norm = 0;
+            if(flower === true)
+            {
+                this.buffer_pos_norm_2 = 0;
+            }
+        }
+
         this.wireframe = wireframe;
         this.isFlower = flower;
+        this.normal = normal;
     }
 
     init(plant)
@@ -116,6 +126,46 @@ class plantRenderable
             gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(this.vertex_idx_wire), gl.STATIC_DRAW );
             this.iCount_wire = faceCnt * 6;
         }
+
+        // if(this.normal === true)
+        // {
+        //     var vert = [];
+        //     var norm = glM.vec3.create();
+
+        //     var vCount = Math.floor(plant['position'].length / 3);
+
+        //     for(var v = 0; v < vCount; v++)
+        //     {
+        //         vert.push(plant['position'][v * 3], plant['position'][v * 3 + 1], plant['position'][v * 3 + 2]);
+        //         glM.vec3.set(norm, plant['normal'][v * 3], plant['normal'][v * 3 + 1], plant['normal'][v * 3 + 2]);
+        //         glM.vec3.normalize(norm, norm);
+        //         glM.vec3.scale(norm, norm, 0.05);
+        //         vert.push(plant['position'][v * 3] + norm[0], plant['position'][v * 3 + 1] + norm[1], plant['position'][v * 3 + 2] + norm[2]);
+        //     }
+
+        //     this.buffer_pos_norm = gl.createBuffer();
+        //     gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos_norm );
+        //     gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(vert), gl.STATIC_DRAW );
+        //     this.vcount_norm = vCount * 2;
+
+        //     if(this.flower === true)
+        //     {
+        //         vert = [];
+
+        //         for(var v = 0; v < vCount; v++)
+        //         {
+        //             vert.push(plant['position_sec'][v * 3], plant['position_sec'][v * 3 + 1], plant['position_sec'][v * 3 + 2]);
+        //             glM.vec3.set(norm, plant['normal_sec'][v * 3], plant['normal_sec'][v * 3 + 1], plant['normal_sec'][v * 3 + 2]);
+        //             glM.vec3.normalize(norm, norm);
+        //             glM.vec3.scale(norm, norm, 0.05);
+        //             vert.push(plant['position_sec'][v * 3] + norm[0], plant['position_sec'][v * 3 + 1] + norm[1], plant['position_sec'][v * 3 + 2] + norm[2]);
+        //         }
+
+        //         this.buffer_pos_norm_2 = gl.createBuffer();
+        //         gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos_norm_2 );
+        //         gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(vert), gl.STATIC_DRAW );
+        //     }
+        // }
     }
 
     render(locations)
@@ -182,6 +232,32 @@ class plantRenderable
             gl.disableVertexAttribArray( locations.col2 );
         }
     }
+
+    // renderNormal(locations)
+    // {
+    //     gl.uniformMatrix4fv( locations.model, false, this.modelMat );
+
+    //     // Render geometry
+
+    //     gl.enableVertexAttribArray( locations.pos );
+    //     gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos_norm );
+    //     gl.vertexAttribPointer( locations.pos, 3, gl.FLOAT, false, 0, 0 );
+
+    //     if(this.flower === true)
+    //     {
+    //         gl.enableVertexAttribArray( locations.pos2 );
+    //         gl.bindBuffer( gl.ARRAY_BUFFER, this.buffer_pos_norm_2 );
+    //         gl.vertexAttribPointer( locations.pos2, 3, gl.FLOAT, false, 0, 0 );
+    //     }
+
+    //     gl.drawArrays(GL_LINES, 0, this.vcount_norm);
+
+    //     gl.disableVertexAttribArray( locations.pos );
+    //     if(this.flower === true)
+    //     {
+    //         gl.disableVertexAttribArray( locations.pos2 );
+    //     }
+    // }
 }
 
 class Program
@@ -220,6 +296,14 @@ var canvas,
     gl, 
     program_plant,
     program_flowers,
+    post_sky,
+    post_DOF_X,
+    post_DOF_Y,
+    post_colorCorrection,
+    program_sky,
+    program_DOF_X,
+    program_DOF_Y,
+    program_CC,
     plants = [],
     flowers = [],
     parameters = {  start_time  : new Date().getTime(), 
@@ -229,7 +313,8 @@ var canvas,
 
 // var glM = glMatrix; // alias
 var camPosition = glM.vec3.create();
-glM.vec3.set(camPosition, 0.0, 0.0, -10.0);
+glM.vec3.set(camPosition, -1.2, 1.0, 2.0);
+var camTarget = [-1.0, 1.0, -0.0];
 var model = glM.mat4.create();
 glM.mat4.identity(model);
 var view = glM.mat4.create();
@@ -238,6 +323,18 @@ var proj = glM.mat4.create();
 var drawAsUsual     = true;
 // var drawWireFrame   = true;
 var drawWireFrame   = false;
+
+width = 600;
+height = 600;
+
+// Light rig
+lightMain = glM.vec3.normalize(glM.vec3.create(), [0.4, 0.15, -1]);
+lightMainColor = [1.000, 0.929, 0.302, 3.0]; // Creamy yellow
+lightDome = glM.vec3.normalize(glM.vec3.create(), [0, 1, 0]);
+lightDomeColor = [0.7, 0.943, 0.925, 1.5]; // Sky blue 
+lightIndirect = glM.vec3.normalize(glM.vec3.create(), [-0.4, 0.15, -1]);
+lightIndirectColor = [0.698, 0.176, 0.208, 1.0]; // Yellow-Greenish
+lightAmbient = [0.953, 0.925, 0.9, 0.6]; // ambient
 
 init();
 animate();
@@ -248,16 +345,42 @@ function init()
 
     // Initialise WebGL
 
+    var isgl2 = true;
     try {
 
-        gl = canvas.getContext( 'experimental-webgl' );
+        gl = canvas.getContext( 'webgl2' );
 
     } catch( error ) { }
+
+    if( !gl )
+    {
+        try {
+            isgl2 = false;
+            gl = canvas.getContext( 'webgl' );
+        }
+        catch(e) {}
+    }
 
     if ( !gl ) {
 
         throw "cannot create webgl context";
 
+    }
+
+    if(!isgl2)
+    {
+        var ext = (
+            gl.getExtension("WEBKIT_WEBGL_depth_texture") ||
+            gl.getExtension("WEBGL_depth_texture") ||
+            gl.getExtension("OES_WEBGL_depth_texture") ||
+            gl.getExtension("MOZ_WEBGL_depth_texture")
+        );
+        console.log(ext);
+
+        if(!ext)
+        {
+            throw "cannot load extension WEBGL_depth_texture!";
+        }
     }
 
     // Create programs
@@ -274,11 +397,20 @@ function init()
         col:        ['color',       false],
         uvw:        ['uv',          false],
         typ:        ['vType',       false],
+
+        dmain:      ['lights[0]',    true],
+        cmain:      ['lightColor[0]',true],
+        ddome:      ['lights[1]',    true],
+        cdome:      ['lightColor[1]',true],
+        dindr:      ['lights[2]',    true],
+        cindr:      ['lightColor[2]',true],
+        cambi:      ['lightColor[3]',true],
+        pcam:       ['camPos',       true],
     });
 
     program_plant.init();
 
-    program_flowers = new Program(gl, vs_bloom, fs_bloom, {
+    program_flowers = new Program(gl, vs_bloom, fs_common/*fs_bloom*/, {
         time:       ['time',        true ],
         model:      ['model',       true ],
         view:       ['view',        true ],
@@ -296,23 +428,75 @@ function init()
         pos2:       ['position_sec',false],
         nor2:       ['normal_sec',  false],
         col2:       ['color_sec',   false],
+
+        dmain:      ['lights[0]',    true],
+        cmain:      ['lightColor[0]',true],
+        ddome:      ['lights[1]',    true],
+        cdome:      ['lightColor[1]',true],
+        dindr:      ['lights[2]',    true],
+        cindr:      ['lightColor[2]',true],
+        cambi:      ['lightColor[3]',true],
+        pcam:       ['camPos',       true],
     });
 
     program_flowers.init();
 
+    program_sky = new Program(gl, vs_Sky, Sky, {
+        vpInv:      ['vpInv',        true],
+        pos:        ['position',    false],
+        uvw:        ['uv',          false],
+        color:      ['color',        true],
+        depth:      ['depth',        true],
+        pcam:       ['camPos',       true],
+        cmain:      ['lightColor',   true],
+        pmain:      ['light',        true],
+    })
+
+    program_DOF = new Program(gl, vs_scrQuad, DOF, {
+        uvw:        ['uv',          false],
+        color:      ['color',        true],
+        depth:      ['depth',        true],
+        dof:        ['DOF',          true],
+        dirc:       ['dirc',         true],
+    });
+
+    program_CC = new Program(gl, vs_scrQuad, ColorCorrection, {
+        uvw:        ['uv',          false],
+        color:      ['color',        true],
+    });
+
+    program_sky.init();
+    program_DOF.init();
+    program_CC.init();
+
+    post_sky = new PostProcess(gl, isgl2, width * 2, height * 2, program_sky, true); // *2 for some poor SSAA
+    post_DOF_X = new PostProcess(gl, isgl2, width, height, program_DOF, false); 
+    post_DOF_Y = new PostProcess(gl, isgl2, width, height, program_DOF, false);
+    post_colorCorrection = new PostProcess(gl, isgl2, width, height, program_CC, false);
+
+    post_sky.init();
+    post_DOF_X.init();
+    post_DOF_Y.init();
+    post_colorCorrection.init();
+
     gl.enable(gl.DEPTH_TEST);
 
-    // jasmine = populatePlant(0);
-    jasmine = populatePlant(19422);
+    for(var i = 0; i < 4; i++)
+    {
+        var translation = glM.mat4.create();
+        glM.mat4.translate(translation, translation, [i * -0.9, i * 0.0, i * -2.3]);
+        // jasmine = populatePlant(0);
+        jasmine = populatePlant(19422 + i * 2019, translation);
 
-    var p = new plantRenderable(gl, false, drawWireFrame);
-    p.init(jasmine);
-    plants.push(p);
+        var p = new plantRenderable(gl, false, drawWireFrame);
+        p.init(jasmine);
+        plants.push(p);
 
-    // Blooming flowers
-    var f = new plantRenderable(gl,  true, drawWireFrame);
-    f.init(jasmine.flower);
-    flowers.push(f);
+        // Blooming flowers
+        var f = new plantRenderable(gl,  true, drawWireFrame);
+        f.init(jasmine.flower);
+        flowers.push(f);
+    }
 
     // TODO: flowers
 }
@@ -390,12 +574,25 @@ function animate()
     requestAnimationFrame( animate );
 }
 
+function updateLight(locations)
+{
+    gl.uniform3fv(locations.dmain, lightMain);
+    gl.uniform3fv(locations.ddome, lightDome);
+    gl.uniform3fv(locations.dindr, lightIndirect);
+
+    gl.uniform4fv(locations.cmain, lightMainColor);
+    gl.uniform4fv(locations.cdome, lightDomeColor);
+    gl.uniform4fv(locations.cindr, lightIndirectColor);
+
+    gl.uniform4fv(locations.cambi, lightAmbient);
+}
+
 function update()
 {
-    // var time = 8100;
-    var time = new Date().getTime() - parameters.start_time;
-    var dist = 5.7;
-    glM.vec3.set(camPosition, dist * Math.sin(time / 2000.0), 3.4, dist * Math.cos(time / 2000.0));
+    // var time = 0;
+    // var time = new Date().getTime() - parameters.start_time;
+    // var dist = 5.7;
+    // glM.vec3.set(camPosition, dist * Math.sin(time / 2000.0), 1.4, dist * Math.cos(time / 2000.0));
 }
 
 function render() 
@@ -403,11 +600,12 @@ function render()
     if ( !program_plant.program ) return;
     if ( !program_flowers.program ) return;
 
-    var camTarget = [0, 1.14, 0];
-
     parameters.time = new Date().getTime() - parameters.start_time;
 
-    gl.clearColor(0.2, 0.2, 0.2, 1.0);
+    // Render to texture for post processing
+    post_sky.attach();
+
+    gl.clearColor(0.6, 0.5, 0.4, 1.0);
     gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
 
     // Load program into GPU
@@ -415,6 +613,8 @@ function render()
     // Draw plants (parts are not flowers)
 
     gl.useProgram( program_plant.program );
+
+    updateLight(program_plant.locations);
 
     // Set values to program variables
     // Update camera matrix
@@ -427,6 +627,7 @@ function render()
     gl.uniform1f( program_plant.locations.time, parameters.time / 1000 );
     gl.uniformMatrix4fv( program_plant.locations.view, false, view );
     gl.uniformMatrix4fv( program_plant.locations.proj, false, proj );
+    gl.uniform3fv( program_plant.locations.pcam, camPosition );
     // gl.uniformMatrix4fv( MVInvLocation, false, MV_Inv );
 
     // Render geometry
@@ -439,17 +640,17 @@ function render()
 
     gl.useProgram( program_flowers.program );
 
+    updateLight(program_flowers.locations);
+
     // Set values to program variables
     // Update camera matrix
-    
-    glM.mat4.identity(view);
-    glM.mat4.lookAt(view, camPosition, camTarget, [0, 1, 0]);
-    glM.mat4.identity(proj);
-    glM.mat4.perspective(proj, Math.PI / 4.0, 1.0, 0.2, 100.0);
 
     gl.uniform1f( program_flowers.locations.time, parameters.time / 1000 );
     gl.uniformMatrix4fv( program_flowers.locations.view, false, view );
     gl.uniformMatrix4fv( program_flowers.locations.proj, false, proj );
+    gl.uniform3fv( program_flowers.locations.pcam, camPosition );
+
+    gl.uniform1f( program_flowers.locations.bloom, 0.5 + 0.65 * Math.sin(parameters.time / 3000) )
     // gl.uniformMatrix4fv( MVInvLocation, false, MV_Inv );
 
     // Render geometry
@@ -457,4 +658,44 @@ function render()
     {
         flower.render(program_flowers.locations);
     }
+
+    // Post processing
+    post_sky.release(width, height);
+    post_DOF_X.attach();
+
+    vpi = glM.mat4.mul(glM.mat4.create(), view, proj);
+    glM.mat4.invert(vpi, vpi);
+    // console.log(vpi);
+
+    post_sky.render(function(){
+        gl.uniformMatrix4fv( program_sky.locations.vpInv, false, vpi );
+        gl.uniform3fv( program_sky.locations.pmain, lightMain );
+        gl.uniform4fv( program_sky.locations.cmain, [1.0, 0.808, 0.482, 1.0] );
+        gl.uniform3fv( program_sky.locations.pcam, camPosition );
+    });
+
+    post_DOF_X.release(width, height);
+    post_DOF_Y.attach();
+
+    post_DOF_X.render(function(){
+        gl.activeTexture(gl.TEXTURE0 + 1);
+        gl.bindTexture(gl.TEXTURE_2D, post_sky.depthTex);
+        gl.uniform1i(post_DOF_X.program.locations.depth, 1);
+        gl.uniform4f(post_DOF_X.program.locations.dof, 0.2, 100.0, 1.5, 1.0);
+        gl.uniform2f(post_DOF_X.program.locations.dirc, 1.0, 0.0);
+    });
+
+    post_DOF_Y.release(width, height);
+    post_colorCorrection.attach();
+
+    post_DOF_Y.render(function(){
+        gl.activeTexture(gl.TEXTURE0 + 1);
+        gl.bindTexture(gl.TEXTURE_2D, post_sky.depthTex);
+        gl.uniform1i(post_DOF_X.program.locations.depth, 1);
+        gl.uniform4f(post_DOF_X.program.locations.dof, 0.2, 100.0, 1.5, 1.0);
+        gl.uniform2f(post_DOF_X.program.locations.dirc, 0.0, 1.0);
+    });
+
+    post_colorCorrection.release(width, height);
+    post_colorCorrection.render();
 }
